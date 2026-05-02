@@ -18,8 +18,10 @@ static void applyDelta(int8_t delta) {
 }
 
 void setup() {
+    delay(2000);
     Serial.begin(115200);
     displayInit();
+    delay(2000);
     otaInit();
     encoderInit();
     keyboardInit();
@@ -32,10 +34,14 @@ void setup() {
 
 void loop() {
     otaHandle();
+    fanBuzzerHandle();
     refreshDisplay();
 
     int8_t delta = encoderGetDelta();
-    if (delta != 0) applyDelta(delta);
+    if (delta != 0) {
+        applyDelta(delta);
+        buzzerBeep(20);
+    }
 
     delta = keyboardGetDelta();
     if (delta != 0) applyDelta(delta);
