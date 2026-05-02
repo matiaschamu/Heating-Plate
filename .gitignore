@@ -1,3 +1,6 @@
+# Credenciales WiFi (nunca subir al repo)
+src/credentials.h
+
 # PlatformIO
 .pio/
 
