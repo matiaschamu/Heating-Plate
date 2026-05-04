@@ -133,3 +133,16 @@ void displayOff() {
     showColon = showDP2 = false;
     allHiZ();
 }
+
+void displayDashes() {
+    for (uint8_t i = 0; i < 4; i++) dispSegs[i] = SEG_G;
+    showColon = false;
+}
+
+void displayCoolingAnimation() {
+    // Tres frames: superior (A) → medio (G) → inferior (D), 400 ms cada uno
+    static const uint8_t frames[3] = { SEG_A, SEG_G, SEG_D };
+    uint8_t frame = (millis() / 400) % 3;
+    for (uint8_t i = 0; i < 4; i++) dispSegs[i] = frames[frame];
+    showColon = false;
+}
