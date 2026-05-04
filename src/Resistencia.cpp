@@ -5,46 +5,48 @@
 
 #define TRIAC_PIN        4
 #define ZEROCROSS_PIN    17
-#define TRIAC_PULSE_US   100
-#define HALF_CYCLE_US    10000   // 10 ms por semiciclo a 50 Hz
+#define TRIAC_PULSE_HIGH 1000
+#define TRIAC_PULSE_LOW   100
+#define HALF_CYCLE_US   10000
 
 #define HW_TIMER_GROUP   TIMER_GROUP_0
 #define HW_TIMER_IDX     TIMER_0
-#define HW_TIMER_DIVIDER 80      // APB 80 MHz / 80 = 1 MHz → 1 µs por tick
+#define HW_TIMER_DIVIDER 80
 
 static volatile uint8_t resistenciaPower = 0;
 
-// Corre en ISR de hardware — máxima precisión, sin scheduling FreeRTOS
+static inline uint32_t pulseDuration() {
+    return resistenciaPower >= 50 ? TRIAC_PULSE_HIGH : TRIAC_PULSE_LOW;
+}
+
 static bool IRAM_ATTR timerISR(void*) {
     timer_pause(HW_TIMER_GROUP, HW_TIMER_IDX);
 
     gpio_set_level((gpio_num_t)TRIAC_PIN, 1);
-    delayMicroseconds(TRIAC_PULSE_US);
+    delayMicroseconds(pulseDuration());
     gpio_set_level((gpio_num_t)TRIAC_PIN, 0);
 
     gpio_intr_enable((gpio_num_t)ZEROCROSS_PIN);
 
-    return false;   // sin yield a tarea de mayor prioridad
+    return false;
 }
 
 static void IRAM_ATTR onZeroCross() {
-    // Captura el tiempo inmediatamente para compensar la latencia de la ISR
     int64_t t0 = esp_timer_get_time();
 
     if (resistenciaPower == 0) return;
 
     if (resistenciaPower == 100) {
         gpio_set_level((gpio_num_t)TRIAC_PIN, 1);
-        delayMicroseconds(TRIAC_PULSE_US);
+        delayMicroseconds(pulseDuration());
         gpio_set_level((gpio_num_t)TRIAC_PIN, 0);
         return;
     }
 
     gpio_intr_disable((gpio_num_t)ZEROCROSS_PIN);
 
-    // Delay nominal menos el tiempo ya consumido ejecutando la ISR
-    uint32_t nominalUs  = (uint32_t)(100 - resistenciaPower) * (HALF_CYCLE_US / 100);
-    int64_t  elapsed    = esp_timer_get_time() - t0;
+    uint32_t nominalUs   = (uint32_t)(100 - resistenciaPower) * (HALF_CYCLE_US / 100);
+    int64_t  elapsed     = esp_timer_get_time() - t0;
     uint32_t correctedUs = (elapsed < nominalUs) ? (uint32_t)(nominalUs - elapsed) : 50;
 
     timer_set_counter_value(HW_TIMER_GROUP, HW_TIMER_IDX, 0ULL);

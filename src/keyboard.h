@@ -1,7 +1,12 @@
 #pragma once
 #include <Arduino.h>
 
-void keyboardInit();
+enum KeyEvent : uint8_t {
+    KEY_NONE,
+    KEY_POWER_PRESS,
+    KEY_FUNCION_PRESS,
+    KEY_BOTH_PRESS,
+};
 
-// Retorna +10, -10, o 0 según la tecla presionada desde la última llamada
-int8_t keyboardGetDelta();
+void keyboardInit();
+KeyEvent keyboardGetEvent();

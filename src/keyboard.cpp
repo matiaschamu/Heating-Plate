@@ -1,86 +1,81 @@
 #include "keyboard.h"
 
-#define KEY_INC       22
-#define KEY_DEC       23
+#define KEY_POWER      22
+#define KEY_FUNCION    23
+#define DEBOUNCE_MS    50
+#define BOTH_WINDOW_MS 150   // ventana para detectar pulsación simultánea
 
-#define DEBOUNCE_MS   50
-#define HOLD_MS       1000
-#define REPEAT_MS     100
-
-enum KeyPhase : uint8_t { IDLE, DEBOUNCING, PRESSED, REPEATING };
+enum KeyPhase : uint8_t { IDLE, DEBOUNCING, CONFIRMED, ACTIVE };
 
 struct Key {
-    uint8_t  pin;
-    int8_t   step;
+    uint8_t           pin;
     volatile uint32_t isrTime;
-    KeyPhase  phase;
-    uint32_t  pressedAt;
-    uint32_t  lastRepeatAt;
+    KeyPhase          phase;
+    uint32_t          confirmedAt;
 };
 
 static Key keys[2] = {
-    { KEY_INC, +10, 0, IDLE, 0, 0 },
-    { KEY_DEC, -10, 0, IDLE, 0, 0 },
+    { KEY_POWER,   0, IDLE, 0 },
+    { KEY_FUNCION, 0, IDLE, 0 },
 };
 
-static void IRAM_ATTR onKeyInc() { keys[0].isrTime = millis(); }
-static void IRAM_ATTR onKeyDec() { keys[1].isrTime = millis(); }
+static void IRAM_ATTR onKeyPower()   { keys[0].isrTime = millis(); }
+static void IRAM_ATTR onKeyFuncion() { keys[1].isrTime = millis(); }
 
 void keyboardInit() {
-    for (auto& k : keys) {
-        pinMode(k.pin, INPUT_PULLUP);
-    }
-    attachInterrupt(digitalPinToInterrupt(KEY_INC), onKeyInc, FALLING);
-    attachInterrupt(digitalPinToInterrupt(KEY_DEC), onKeyDec, FALLING);
+    for (auto& k : keys) pinMode(k.pin, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(KEY_POWER),   onKeyPower,   FALLING);
+    attachInterrupt(digitalPinToInterrupt(KEY_FUNCION), onKeyFuncion, FALLING);
 }
 
-int8_t keyboardGetDelta() {
-    int8_t   delta = 0;
-    uint32_t now   = millis();
+KeyEvent keyboardGetEvent() {
+    uint32_t now = millis();
 
     for (auto& k : keys) {
         switch (k.phase) {
-
             case IDLE:
-                if (k.isrTime != 0)
-                    k.phase = DEBOUNCING;
+                if (k.isrTime != 0) k.phase = DEBOUNCING;
                 break;
-
             case DEBOUNCING:
                 if (now - k.isrTime >= DEBOUNCE_MS) {
+                    k.isrTime = 0;
                     if (digitalRead(k.pin) == LOW) {
-                        k.phase     = PRESSED;
-                        k.pressedAt = now;
-                        delta      += k.step;   // disparo inicial
+                        k.phase       = CONFIRMED;
+                        k.confirmedAt = now;
                     } else {
-                        k.phase = IDLE;         // era ruido
+                        k.phase = IDLE;
                     }
-                    k.isrTime = 0;
                 }
                 break;
-
-            case PRESSED:
+            case CONFIRMED:
+            case ACTIVE:
                 if (digitalRead(k.pin) == HIGH) {
                     k.phase   = IDLE;
                     k.isrTime = 0;
-                } else if (now - k.pressedAt >= HOLD_MS) {
-                    k.phase        = REPEATING;
-                    k.lastRepeatAt = now;
-                    delta         += k.step;    // primer repetición
-                }
-                break;
-
-            case REPEATING:
-                if (digitalRead(k.pin) == HIGH) {
-                    k.phase   = IDLE;
-                    k.isrTime = 0;
-                } else if (now - k.lastRepeatAt >= REPEAT_MS) {
-                    k.lastRepeatAt = now;
-                    delta         += k.step;    // repetición rápida
                 }
                 break;
         }
     }
 
-    return delta;
+    // Ambas CONFIRMED dentro de la ventana → simultánea
+    if (keys[0].phase == CONFIRMED && keys[1].phase == CONFIRMED) {
+        uint32_t t0   = keys[0].confirmedAt;
+        uint32_t t1   = keys[1].confirmedAt;
+        uint32_t diff = t0 > t1 ? t0 - t1 : t1 - t0;
+        if (diff <= BOTH_WINDOW_MS) {
+            keys[0].phase = ACTIVE;
+            keys[1].phase = ACTIVE;
+            return KEY_BOTH_PRESS;
+        }
+    }
+
+    // Tecla individual: espera BOTH_WINDOW_MS antes de emitir
+    for (int i = 0; i < 2; i++) {
+        if (keys[i].phase == CONFIRMED && now - keys[i].confirmedAt > BOTH_WINDOW_MS) {
+            keys[i].phase = ACTIVE;
+            return i == 0 ? KEY_POWER_PRESS : KEY_FUNCION_PRESS;
+        }
+    }
+
+    return KEY_NONE;
 }
