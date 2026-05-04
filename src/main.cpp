@@ -21,7 +21,6 @@ void setup() {
     delay(2000);
     Serial.begin(115200);
     displayInit();
-    delay(2000);
     otaInit();
     encoderInit();
     keyboardInit();
@@ -46,6 +45,9 @@ void loop() {
     delta = keyboardGetDelta();
     if (delta != 0) applyDelta(delta);
 
-    fanSet(timeMinutes > 12 * 60 + 40);         // > 12:40 → ventilador ON
-    resistenciaSet(timeMinutes < 12 * 60 + 30); // < 12:30 → resistencia ON
+    fanSet(timeMinutes > 12 * 60 + 40);
+
+    // 12:29 → 100%, 12:28 → 99%, ... se clampea en 0
+    int16_t power = timeMinutes - (12 * 60 + 29 - 99);  // = timeMinutes - 649
+    resistenciaSet(timeMinutes >= 12 * 60 + 30 ? 0 : (uint8_t)constrain(power, 0, 100));
 }
