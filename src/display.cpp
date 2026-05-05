@@ -1,13 +1,14 @@
 #include "display.h"
+#include "driver/timer.h"
 
 // ── Pines ─────────────────────────────────────────────────────────────────────
 // Comunes: seleccionan el dígito activo (dígito 1 = izquierda)
-static const uint8_t COM[4] = {33, 26, 14, 13};
+static uint8_t COM[4] = {33, 26, 14, 13};
 
 // Pines de segmento — la dirección determina qué segmento:
 //   pin(-) con COM(+)  →  A  B  C  D      índice: 0  1  2  3
 //   pin(+) con COM(-)  →  E  F  G  —      índice: 0  1  2  —
-static const uint8_t SEG[4] = {32, 25, 27, 12};
+static uint8_t SEG[4] = {32, 25, 27, 12};
 
 // Elementos especiales (pares fijos, no dependen del dígito activo)
 //   Colon :          →  GPIO12(+) / GPIO13(-)
@@ -39,26 +40,52 @@ static const uint8_t FONT[10] = {
 };
 
 // ── Estado del display ────────────────────────────────────────────────────────
-static uint8_t dispSegs[4] = {0, 0, 0, 0};
+static volatile uint8_t dispSegs[4] = {0, 0, 0, 0};
 
-bool showColon = false;
-bool showDP2   = false;
-bool ledPower  = false;
-bool ledTemp   = false;
-bool ledTimer  = false;
+volatile bool showColon = false;
+volatile bool showDP2   = false;
+volatile bool ledPower  = false;
+volatile bool ledTemp   = false;
+volatile bool ledTimer  = false;
 
-// ── Helpers de bajo nivel ─────────────────────────────────────────────────────
-static void allHiZ() {
-    for (uint8_t i = 0; i < 4; i++) {
-        pinMode(COM[i], INPUT);
-        pinMode(SEG[i], INPUT);
+// ── Macros de GPIO ultrarrápidos y seguros para ISR ───────────────────────────
+static inline void IRAM_ATTR pinHiZ(uint8_t pin) {
+    if (pin < 32) GPIO.enable_w1tc = (1UL << pin);
+    else GPIO.enable1_w1tc.val = (1UL << (pin - 32));
+}
+
+static inline void IRAM_ATTR pinHigh(uint8_t pin) {
+    if (pin < 32) {
+        GPIO.out_w1ts = (1UL << pin);
+        GPIO.enable_w1ts = (1UL << pin);
+    } else {
+        GPIO.out1_w1ts.val = (1UL << (pin - 32));
+        GPIO.enable1_w1ts.val = (1UL << (pin - 32));
     }
 }
 
-static void drivePair(uint8_t anodePin, uint8_t cathodePin) {
+static inline void IRAM_ATTR pinLow(uint8_t pin) {
+    if (pin < 32) {
+        GPIO.out_w1tc = (1UL << pin);
+        GPIO.enable_w1ts = (1UL << pin);
+    } else {
+        GPIO.out1_w1tc.val = (1UL << (pin - 32));
+        GPIO.enable1_w1ts.val = (1UL << (pin - 32));
+    }
+}
+
+// ── Helpers de bajo nivel ─────────────────────────────────────────────────────
+static void IRAM_ATTR allHiZ() {
+    for (uint8_t i = 0; i < 4; i++) {
+        pinHiZ(COM[i]);
+        pinHiZ(SEG[i]);
+    }
+}
+
+static void IRAM_ATTR drivePair(uint8_t anodePin, uint8_t cathodePin) {
     allHiZ();
-    pinMode(anodePin,   OUTPUT); digitalWrite(anodePin,   HIGH);
-    pinMode(cathodePin, OUTPUT); digitalWrite(cathodePin, LOW);
+    pinHigh(anodePin);
+    pinLow(cathodePin);
 }
 
 // ── Refresh ───────────────────────────────────────────────────────────────────
@@ -67,13 +94,14 @@ static void drivePair(uint8_t anodePin, uint8_t cathodePin) {
 //   Fase 0 — COM es ánodo (+):  enciende A, B, C, D
 //   Fase 1 — COM es cátodo (-): enciende E, F, G
 // Slots 8-12: colon, DP, LEDs especiales.
-void refreshDisplay() {
-    static uint8_t  slot   = 0;
-    static uint32_t lastUs = 0;
+//
+// Tablas movidas a scope de archivo para que la ISR no dependa
+// de los guardas C++11 de inicialización de estáticas locales (no IRAM).
+static const uint8_t cathBits[4] = {SEG_A, SEG_B, SEG_C, SEG_D};
+static const uint8_t anodBits[3] = {SEG_E, SEG_F, SEG_G};
 
-    uint32_t now = micros();
-    if (now - lastUs < 500) return;
-    lastUs = now;
+static bool IRAM_ATTR displayTimerCallback(void*) {
+    static uint8_t slot = 0;
 
     allHiZ();
 
@@ -83,19 +111,17 @@ void refreshDisplay() {
         uint8_t segs  = dispSegs[d];
 
         if (phase == 0) {
-            static const uint8_t cathBits[4] = {SEG_A, SEG_B, SEG_C, SEG_D};
-            pinMode(COM[d], OUTPUT); digitalWrite(COM[d], HIGH);
+            pinHigh(COM[d]);
             for (uint8_t s = 0; s < 4; s++) {
                 if (segs & cathBits[s]) {
-                    pinMode(SEG[s], OUTPUT); digitalWrite(SEG[s], LOW);
+                    pinLow(SEG[s]);
                 }
             }
         } else {
-            static const uint8_t anodBits[3] = {SEG_E, SEG_F, SEG_G};
-            pinMode(COM[d], OUTPUT); digitalWrite(COM[d], LOW);
+            pinLow(COM[d]);
             for (uint8_t s = 0; s < 3; s++) {
                 if (segs & anodBits[s]) {
-                    pinMode(SEG[s], OUTPUT); digitalWrite(SEG[s], HIGH);
+                    pinHigh(SEG[s]);
                 }
             }
         }
@@ -106,11 +132,41 @@ void refreshDisplay() {
     else if   (slot == 12 && ledTimer)  { drivePair(13, 26); }
 
     if (++slot > 12) slot = 0;
+    return false;   // sin yield a tarea de mayor prioridad
 }
 
 // ── API pública ───────────────────────────────────────────────────────────────
+//
+// Usa grupo 0 / timer 1 (Resistencia.cpp ocupa grupo 0 / timer 0).
+// Misma API IDF que Resistencia para evitar mezclar wrappers Arduino + IDF
+// sobre el mismo periférico.
+#define DISP_TIMER_GROUP   TIMER_GROUP_0
+#define DISP_TIMER_IDX     TIMER_1
+#define DISP_TIMER_DIVIDER 80          // 80 MHz / 80 = 1 MHz → 1 µs por tick
+#define DISP_TIMER_PERIOD  500         // µs entre slots → ~154 Hz de refresco
+
 void displayInit() {
+    // Configuración inicial del GPIO mux (una sola vez)
+    for (uint8_t i = 0; i < 4; i++) {
+        pinMode(COM[i], OUTPUT);
+        pinMode(SEG[i], OUTPUT);
+    }
     allHiZ();
+
+    timer_config_t cfg = {};
+    cfg.alarm_en    = TIMER_ALARM_EN;
+    cfg.counter_en  = TIMER_PAUSE;
+    cfg.intr_type   = TIMER_INTR_LEVEL;
+    cfg.counter_dir = TIMER_COUNT_UP;
+    cfg.auto_reload = TIMER_AUTORELOAD_EN;
+    cfg.divider     = DISP_TIMER_DIVIDER;
+
+    timer_init(DISP_TIMER_GROUP, DISP_TIMER_IDX, &cfg);
+    timer_set_counter_value(DISP_TIMER_GROUP, DISP_TIMER_IDX, 0ULL);
+    timer_set_alarm_value(DISP_TIMER_GROUP, DISP_TIMER_IDX, DISP_TIMER_PERIOD);
+    timer_enable_intr(DISP_TIMER_GROUP, DISP_TIMER_IDX);
+    timer_isr_callback_add(DISP_TIMER_GROUP, DISP_TIMER_IDX, displayTimerCallback, nullptr, 0);
+    timer_start(DISP_TIMER_GROUP, DISP_TIMER_IDX);
 }
 
 void displayNumber(uint16_t num) {

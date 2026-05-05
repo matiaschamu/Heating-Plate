@@ -68,7 +68,7 @@ static void updateDisplay() {
             break;
 
         case POWER:
-            displayNumber(powerWatts);
+            displayNumber(showCurrentTemp ? (uint16_t)currentTemp : powerWatts);
             showColon = false;
             break;
 
@@ -209,7 +209,7 @@ static void handleKeyEvent(KeyEvent ev) {
                 // Con salida activa: alterna vista según el modo, resto bloqueado
                 if (inTimerMode())
                     showTimerView = !showTimerView;
-                else if (appMode == TEMP)
+                else if (appMode == TEMP || appMode == POWER)
                     showCurrentTemp = !showCurrentTemp;
             } else {
                 // Sin salida: cicla modos y resetea vistas
@@ -273,5 +273,4 @@ void loop() {
 
     applyOutput();
     updateDisplay();
-    refreshDisplay();
 }

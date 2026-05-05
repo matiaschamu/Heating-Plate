@@ -59,7 +59,6 @@ void otaInit() {
                 break;
         }
 
-        refreshDisplay();
         delay(10);
     }
 
@@ -67,7 +66,6 @@ void otaInit() {
     setLeds(false, false, true);
     uint32_t t = millis();
     while (millis() - t < 1000) {
-        refreshDisplay();
         delay(10);
     }
     setLeds(false, false, false);

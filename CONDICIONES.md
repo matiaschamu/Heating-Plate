@@ -82,7 +82,7 @@ E   C
 
 | # | Condición | Estado |
 |---|-----------|--------|
-| 1 | En un main.h dejar una badera llamada Debug que lo que hace sea habilitar la el debug que se imprime por el puerto serie | Pendiente |
+| 1 | En un main.h dejar una bandera llamada Debug que lo que hace sea habilitar el debug que se imprime por el puerto serie | Pendiente |
 
 ---
 
