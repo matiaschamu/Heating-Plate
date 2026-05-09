@@ -1,49 +1,88 @@
 #include "adc.h"
 
-#define PIN_TEMP    36
-#define PIN_VOLTAGE 39
+// Temperatura: MAX6675 (SPI bit-bang, solo lectura)
+#define MAX6675_CS   5
+#define MAX6675_SCK  18
+#define MAX6675_SO   19
+
+// Tensión: ADC interno
+#define PIN_VOLTAGE  39
 
 #define ADC_MAX     4095.0f
-#define TEMP_MAX    650.0f
 #define VOLT_MAX    220.0f
 
-#define SAMPLES     32      // promedio de lecturas por muestra
-#define IIR_ALPHA   0.05f   // filtro IIR: valores bajos = más suavizado (0.05 ≈ τ 20 muestras)
+#define SAMPLES     32      // promedio de lecturas del ADC (tensión)
+#define IIR_ALPHA   0.05f   // filtro IIR: valores bajos = más suavizado
 
-static float filteredTemp    = 0;
-static float filteredVoltage = 0;
-static bool  initialized     = false;
+// MAX6675 necesita ~220 ms entre conversiones; no leer más rápido
+#define MAX6675_MIN_PERIOD_MS  250
 
-static float readAvg(uint8_t pin) {
+static float    filteredTemp    = 0;
+static float    filteredVoltage = 0;
+static uint32_t lastTempReadMs  = 0;
+static float    lastTempRaw     = 0;     // última lectura cruda válida
+
+static float readVoltageAvg() {
     uint32_t sum = 0;
     for (uint8_t i = 0; i < SAMPLES; i++)
-        sum += analogRead(pin);
+        sum += analogRead(PIN_VOLTAGE);
     return (float)sum / SAMPLES;
+}
+
+// Devuelve temperatura en °C, o -1 si el termopar está desconectado
+static float readMax6675() {
+    digitalWrite(MAX6675_CS, LOW);
+    delayMicroseconds(10);
+
+    uint16_t value = 0;
+    for (int i = 15; i >= 0; i--) {
+        digitalWrite(MAX6675_SCK, LOW);
+        delayMicroseconds(2);
+        if (digitalRead(MAX6675_SO)) value |= (1 << i);
+        digitalWrite(MAX6675_SCK, HIGH);
+        delayMicroseconds(2);
+    }
+
+    digitalWrite(MAX6675_CS, HIGH);
+
+    if (value & (1 << 2)) return -1.0f;     // bit 2 = termopar abierto
+    return ((value >> 3) & 0x0FFF) * 0.25f; // 12 bits, 0.25 °C/LSB
 }
 
 void adcInit() {
     analogReadResolution(12);
-    pinMode(PIN_TEMP,    INPUT);
     pinMode(PIN_VOLTAGE, INPUT);
-    analogSetPinAttenuation(PIN_TEMP,    ADC_0db);    // 0-1.1 V, maxima precision
-    analogSetPinAttenuation(PIN_VOLTAGE, ADC_11db);   // 0-3.3 V, rango completo
+    analogSetPinAttenuation(PIN_VOLTAGE, ADC_11db);   // 0-3.3 V
 
-    // Precarga el filtro con la lectura real para evitar arranque desde 0
-    float rawTemp    = (readAvg(PIN_TEMP)    / ADC_MAX) * TEMP_MAX;
-    float rawVoltage = (readAvg(PIN_VOLTAGE) / ADC_MAX) * VOLT_MAX;
-    filteredTemp     = rawTemp;
-    filteredVoltage  = rawVoltage;
-    initialized      = true;
+    pinMode(MAX6675_CS,  OUTPUT);
+    pinMode(MAX6675_SCK, OUTPUT);
+    pinMode(MAX6675_SO,  INPUT);
+    digitalWrite(MAX6675_CS,  HIGH);
+    digitalWrite(MAX6675_SCK, LOW);
+
+    delay(250);   // primera conversión del MAX6675
+
+    float rawTemp = readMax6675();
+    if (rawTemp < 0) rawTemp = 0;
+    lastTempRaw     = rawTemp;
+    filteredTemp    = rawTemp;
+    lastTempReadMs  = millis();
+
+    filteredVoltage = (readVoltageAvg() / ADC_MAX) * VOLT_MAX;
 }
 
 float adcGetTemp() {
-    float raw    = (readAvg(PIN_TEMP) / ADC_MAX) * TEMP_MAX;
-    filteredTemp = filteredTemp + IIR_ALPHA * (raw - filteredTemp);
+    if (millis() - lastTempReadMs >= MAX6675_MIN_PERIOD_MS) {
+        lastTempReadMs = millis();
+        float r = readMax6675();
+        if (r >= 0) lastTempRaw = r;       // si hay error, conserva la última válida
+    }
+    filteredTemp = filteredTemp + IIR_ALPHA * (lastTempRaw - filteredTemp);
     return filteredTemp;
 }
 
 float adcGetVoltage() {
-    float raw        = (readAvg(PIN_VOLTAGE) / ADC_MAX) * VOLT_MAX;
-    filteredVoltage  = filteredVoltage + IIR_ALPHA * (raw - filteredVoltage);
+    float raw       = (readVoltageAvg() / ADC_MAX) * VOLT_MAX;
+    filteredVoltage = filteredVoltage + IIR_ALPHA * (raw - filteredVoltage);
     return filteredVoltage;
 }

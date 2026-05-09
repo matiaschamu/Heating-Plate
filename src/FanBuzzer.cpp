@@ -1,6 +1,6 @@
 #include "FanBuzzer.h"
 
-#define FAN_PIN   5
+#define FAN_PIN   2
 #define LEDC_CH   0
 #define LEDC_FREQ 3900
 #define LEDC_RES  8        // 8 bits → duty 0-255

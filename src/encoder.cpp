@@ -1,7 +1,7 @@
 #include "encoder.h"
 
 #define ENC_A 21
-#define ENC_B 19
+#define ENC_B 16
 
 static volatile int8_t encDelta = 0;
 static volatile uint32_t pendingAt = 0; // micros() del último flanco, 0 = sin pendiente
