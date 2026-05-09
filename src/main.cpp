@@ -31,7 +31,7 @@ static uint32_t tempLastMs    = 0;
 // ── Salidas ───────────────────────────────────────────────────────────────────
 static void applyOutput() {
     // Fan: activo mientras haya salida, y hasta que la placa baje de 50 °C
-    fanSet(outputOn || currentTemp >= 1.0f);
+    fanSet(outputOn || currentTemp >= 50.0f);
 
     if (!outputOn) { resistenciaSet(0); return; }
 
@@ -55,7 +55,7 @@ static void applyOutput() {
 static void updateDisplay() {
     switch (appMode) {
         case OFF:
-            if (currentTemp >= 1.0f) {
+            if (currentTemp >= 35.0f) {
                 if (showTempInOff)
                     displayNumber((uint16_t)currentTemp);
                 else
@@ -200,7 +200,7 @@ static void handleKeyEvent(KeyEvent ev) {
         case KEY_FUNCION_PRESS:
             buzzerBeep(30);
             if (appMode == OFF) {
-                if (currentTemp >= 1.0f)
+                if (currentTemp >= 35.0f)
                     showTempInOff = !showTempInOff;
                 break;
             }
