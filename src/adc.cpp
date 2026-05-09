@@ -12,15 +12,14 @@
 #define VOLT_MAX    220.0f
 
 #define SAMPLES     32      // promedio de lecturas del ADC (tensión)
-#define IIR_ALPHA   0.05f   // filtro IIR: valores bajos = más suavizado
+#define IIR_ALPHA   0.05f   // filtro IIR para tensión
 
 // MAX6675 necesita ~220 ms entre conversiones; no leer más rápido
 #define MAX6675_MIN_PERIOD_MS  250
 
-static float    filteredTemp    = 0;
 static float    filteredVoltage = 0;
 static uint32_t lastTempReadMs  = 0;
-static float    lastTempRaw     = 0;     // última lectura cruda válida
+static float    lastTempRaw     = 0;     // última lectura válida del MAX6675
 
 static float readVoltageAvg() {
     uint32_t sum = 0;
@@ -64,9 +63,8 @@ void adcInit() {
 
     float rawTemp = readMax6675();
     if (rawTemp < 0) rawTemp = 0;
-    lastTempRaw     = rawTemp;
-    filteredTemp    = rawTemp;
-    lastTempReadMs  = millis();
+    lastTempRaw    = rawTemp;
+    lastTempReadMs = millis();
 
     filteredVoltage = (readVoltageAvg() / ADC_MAX) * VOLT_MAX;
 }
@@ -77,8 +75,7 @@ float adcGetTemp() {
         float r = readMax6675();
         if (r >= 0) lastTempRaw = r;       // si hay error, conserva la última válida
     }
-    filteredTemp = filteredTemp + IIR_ALPHA * (lastTempRaw - filteredTemp);
-    return filteredTemp;
+    return lastTempRaw;
 }
 
 float adcGetVoltage() {

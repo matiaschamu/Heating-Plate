@@ -31,7 +31,13 @@ static uint32_t tempLastMs    = 0;
 // ── Salidas ───────────────────────────────────────────────────────────────────
 static void applyOutput() {
     // Fan: activo mientras haya salida, y hasta que la placa baje de 50 °C
-    fanSet(outputOn || currentTemp >= 50.0f);
+    if (outputOn) {
+        fanSet(true);
+    } else {
+        if      (currentTemp >= 47.0f) fanSet(true);
+        else if (currentTemp <  42.0f) fanSet(false);
+        // entre 42 y 47: mantiene estado actual (histéresis)
+    }
 
     if (!outputOn) { resistenciaSet(0); return; }
 
