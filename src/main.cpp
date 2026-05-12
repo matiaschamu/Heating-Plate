@@ -6,6 +6,7 @@
 #include "FanBuzzer.h"
 #include "Resistencia.h"
 #include "adc.h"
+#include "temperatura.h"
 
 // ── Modos ─────────────────────────────────────────────────────────────────────
 enum AppMode : uint8_t { OFF, POWER, POWER_TIMER, TEMP, TEMP_TIMER };
@@ -26,7 +27,6 @@ static uint16_t tempSetpoint  = 100;    // 0-650 °C
 static float    currentTemp   = 0;
 
 static uint32_t timerLastMs   = 0;
-static uint32_t tempLastMs    = 0;
 
 // ── Salidas ───────────────────────────────────────────────────────────────────
 static void applyOutput() {
@@ -47,11 +47,9 @@ static void applyOutput() {
             resistenciaSet((uint8_t)(powerWatts / 20));   // 100W=5% … 2000W=100%
             break;
         case TEMP:
-        case TEMP_TIMER: {
-            float error = (float)tempSetpoint - currentTemp;
-            resistenciaSet((uint8_t)constrain((int)(error * 5.0f), 0, 100));
+        case TEMP_TIMER:
+            resistenciaSet((uint8_t)temperaturaGetOutput());
             break;
-        }
         default:
             resistenciaSet(0);
     }
@@ -234,9 +232,13 @@ static void handleKeyEvent(KeyEvent ev) {
         case KEY_BOTH_PRESS:
             if (appMode == OFF) break;
             outputOn = !outputOn;
-            if (outputOn && inTimerMode()) {
-                timerSecs   = timerSetSecs;
-                timerLastMs = millis();
+            if (outputOn) {
+                if (inTimerMode()) {
+                    timerSecs   = timerSetSecs;
+                    timerLastMs = millis();
+                }
+                if (appMode == TEMP || appMode == TEMP_TIMER)
+                    temperaturaPidReset();
             }
             buzzerBeep(outputOn ? 200 : 100);
             break;
@@ -257,6 +259,7 @@ void setup() {
     fanInit();
     resistenciaInit();
     adcInit();
+    temperaturaInit();
 
     displayDashes();
     ledPower = false;
@@ -268,10 +271,8 @@ void loop() {
     otaHandle();
     fanBuzzerHandle();
 
-    if (millis() - tempLastMs >= 500) {
-        tempLastMs  = millis();
-        currentTemp = adcGetTemp();
-    }
+    temperaturaUpdate(tempSetpoint);
+    currentTemp = temperaturaGetCurrent();
 
     handleTimer();
     handleKeyEvent(keyboardGetEvent());
