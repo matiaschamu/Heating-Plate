@@ -79,3 +79,7 @@ KeyEvent keyboardGetEvent() {
 
     return KEY_NONE;
 }
+
+bool keyboardBothPressedRaw() {
+    return digitalRead(KEY_POWER) == LOW && digitalRead(KEY_FUNCION) == LOW;
+}

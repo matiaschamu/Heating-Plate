@@ -1,4 +1,8 @@
 #pragma once
 
-void otaInit();   // conecta WiFi y arranca OTA (bloquea hasta conectar)
-void otaHandle(); // llamar en cada loop()
+// Inicializa ArduinoOTA. Llamar solo cuando ya estás conectado a WiFi en
+// modo STA. Expone el hostname mDNS "HeatingPlate.local".
+void otaInit();
+
+// Llamar en cada loop(). Procesa las solicitudes de OTA upload.
+void otaHandle();
