@@ -49,7 +49,7 @@ El control se hace localmente desde dos botones y un encoder rotativo con un dis
 | Control de la resistencia | Phase-angle con detección de cruce por cero (50 Hz) |
 | Timer | 5 s – 99:59 minutos |
 | Conectividad | WiFi 2.4 GHz (STA + AP) |
-| OTA | ArduinoOTA por mDNS (`HeatingPlate.local`) |
+| OTA | ArduinoOTA por mDNS (`AlienTech.local`) |
 | Display | 4 dígitos 7-segmentos multiplexados (~154 Hz) |
 | Entradas físicas | 2 botones + encoder rotativo |
 | Salidas físicas | TRIAC, ventilador, buzzer, 3 LEDs de estado |
@@ -133,9 +133,9 @@ Pasos:
 
 ### Uso normal
 
-Después de conectarse a tu WiFi, el equipo muestra su **IP** en el display, octeto por octeto (por ejemplo `192` → `168` → `0` → `73`). Anotala o usá `HeatingPlate.local` desde el browser (vía mDNS).
+Después de conectarse a tu WiFi, el equipo muestra su **IP** en el display, octeto por octeto (por ejemplo `192` → `168` → `0` → `73`). Anotala o usá `AlienTech.local` desde el browser (vía mDNS).
 
-Abriendo `http://HeatingPlate.local/` (o `http://<IP>/`) accedés al **panel de control web**:
+Abriendo `http://AlienTech.local/` (o `http://<IP>/`) accedés al **panel de control web**:
 
 - **Temperatura actual** — se actualiza cada segundo
 - **Modo** — selector con los 5 modos disponibles
@@ -259,10 +259,10 @@ pio run -e esp32dev_ota -t upload
 
 Requisitos para OTA:
 - El equipo tiene que estar **conectado a tu WiFi** (no en modo AP).
-- Tu PC tiene que poder resolver `HeatingPlate.local` por **mDNS** (Bonjour en Windows / Avahi en Linux / nativo en Mac).
+- Tu PC tiene que poder resolver `AlienTech.local` por **mDNS** (Bonjour en Windows / Avahi en Linux / nativo en Mac).
 - El puerto UDP 5353 no puede estar bloqueado por el firewall.
 
-> **Nota:** la primera vez después de cambiar de red, el IP puede cambiar pero `HeatingPlate.local` sigue funcionando. Si por algún motivo mDNS no resuelve, podés cambiar `upload_port` en `platformio.ini` por la IP que muestre el display al arrancar.
+> **Nota:** la primera vez después de cambiar de red, el IP puede cambiar pero `AlienTech.local` sigue funcionando. Si por algún motivo mDNS no resuelve, podés cambiar `upload_port` en `platformio.ini` por la IP que muestre el display al arrancar.
 
 ---
 
@@ -276,7 +276,7 @@ Mirá los LEDs:
 ### Olvidé en qué red está
 Hacé el procedimiento de [borrar la red guardada](#borrar-la-red-guardada): mantené los dos botones presionados al alimentarlo.
 
-### `HeatingPlate.local` no resuelve
+### `AlienTech.local` no resuelve
 - En Windows, asegurate de tener instalado el **Bonjour Print Services** (incluido con iTunes) o que el servicio de descubrimiento mDNS esté activo.
 - Si no querés depender de mDNS, anotá la IP que el equipo muestra en el display al arrancar.
 

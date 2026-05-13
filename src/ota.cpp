@@ -4,7 +4,7 @@
 static bool s_inited = false;
 
 void otaInit() {
-    ArduinoOTA.setHostname("HeatingPlate");
+    ArduinoOTA.setHostname("AlienTech");
     ArduinoOTA.begin();
     s_inited = true;
 }
