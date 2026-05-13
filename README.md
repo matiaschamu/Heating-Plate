@@ -1,4 +1,4 @@
-# Anafe / Heating Plate
+# Alien Tech
 
 Controlador electrónico para anafe / placa de calentamiento basado en **ESP32**, con control de temperatura por PID, control remoto vía WiFi, OTA y display de 7 segmentos.
 
