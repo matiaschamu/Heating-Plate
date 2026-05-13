@@ -16,7 +16,12 @@ static AppMode  appMode       = OFF;
 
 static bool inTimerMode() { return appMode == POWER_TIMER || appMode == TEMP_TIMER; }
 static bool     outputOn      = false;
-static bool     showTimerView    = true;   // en modos timer: true=timer, false=potencia/temp
+
+// Vistas en modos timer: cicla con FUNCION mientras hay salida
+static const uint8_t TV_TIMER    = 0;
+static const uint8_t TV_SETPOINT = 1;
+static const uint8_t TV_TEMP     = 2;
+static uint8_t  timerView        = TV_TIMER;
 static bool     showCurrentTemp  = false;  // en modo TEMP: true=temperatura leida, false=setpoint
 static bool     showTempInOff   = false;  // en OFF durante enfriamiento: muestra temperatura actual
 
@@ -79,14 +84,17 @@ static void updateDisplay() {
             break;
 
         case POWER_TIMER:
-            if (showTimerView) {
+            if (timerView == TV_TIMER) {
                 // Vista timer: MM:SS countdown o MM:00 si está detenido
                 if (outputOn && timerSecs > 0)
                     displayTime((uint8_t)(timerSecs / 60), (uint8_t)(timerSecs % 60));
                 else
                     displayTime((uint8_t)(timerSetSecs / 60), (uint8_t)(timerSetSecs % 60));
-            } else {
+            } else if (timerView == TV_SETPOINT) {
                 displayNumber(powerWatts);
+                showColon = false;
+            } else {
+                displayNumber((uint16_t)currentTemp);
                 showColon = false;
             }
             break;
@@ -97,13 +105,16 @@ static void updateDisplay() {
             break;
 
         case TEMP_TIMER:
-            if (showTimerView) {
+            if (timerView == TV_TIMER) {
                 if (outputOn && timerSecs > 0)
                     displayTime((uint8_t)(timerSecs / 60), (uint8_t)(timerSecs % 60));
                 else
                     displayTime((uint8_t)(timerSetSecs / 60), (uint8_t)(timerSetSecs % 60));
-            } else {
+            } else if (timerView == TV_SETPOINT) {
                 displayNumber(tempSetpoint);
+                showColon = false;
+            } else {
+                displayNumber((uint16_t)currentTemp);
                 showColon = false;
             }
             break;
@@ -143,7 +154,7 @@ static void handleEncoder(int8_t delta) {
             break;
 
         case POWER_TIMER:
-            if (showTimerView) {
+            if (timerView == TV_TIMER) {
                 int32_t step = delta > 0 ? delta * 60 : delta * 5;  // sube 60s (1 min), baja 5s
                 auto timerWrap = [](int32_t val) -> uint32_t {
                     if (val > 99 * 60) return 5;          // rollover al máximo → mínimo
@@ -163,7 +174,7 @@ static void handleEncoder(int8_t delta) {
             break;
 
         case TEMP_TIMER:
-            if (showTimerView) {
+            if (timerView == TV_TIMER) {
                 int32_t step = delta > 0 ? delta * 60 : delta * 5;  // sube 60s (1 min), baja 5s
                 auto timerWrap = [](int32_t val) -> uint32_t {
                     if (val > 99 * 60) return 5;          // rollover al máximo → mínimo
@@ -192,7 +203,7 @@ static void handleKeyEvent(KeyEvent ev) {
             if (appMode == OFF) {
                 appMode       = POWER;
                 outputOn      = false;
-                showTimerView = true;
+                timerView     = TV_TIMER;
                 showTempInOff = false;
             } else {
                 appMode         = OFF;
@@ -214,12 +225,12 @@ static void handleKeyEvent(KeyEvent ev) {
             if (outputOn) {
                 // Con salida activa: alterna vista según el modo, resto bloqueado
                 if (inTimerMode())
-                    showTimerView = !showTimerView;
+                    timerView = (uint8_t)((timerView + 1) % 3);
                 else if (appMode == TEMP || appMode == POWER)
                     showCurrentTemp = !showCurrentTemp;
             } else {
                 // Sin salida: cicla modos y resetea vistas
-                showTimerView   = true;
+                timerView       = TV_TIMER;
                 showCurrentTemp = false;
                 switch (appMode) {
                     case POWER:       appMode = POWER_TIMER; break;
@@ -276,7 +287,7 @@ bool controllerSetMode(AppMode m) {
     bool    wasOn   = outputOn;
     AppMode oldMode = appMode;
     appMode         = m;
-    showTimerView   = true;
+    timerView       = TV_TIMER;
     showCurrentTemp = false;
 
     // Si seguimos prendidos y cambiamos a un modo TEMP desde otro, reset PID
