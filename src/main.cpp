@@ -27,6 +27,8 @@ static uint16_t tempSetpoint  = 100;    // 0-650 °C
 static float    currentTemp   = 0;
 
 static uint32_t timerLastMs   = 0;
+static float    currentVoltage  = 0.0f;
+static uint32_t voltageLastMs   = 0;
 
 // ── Salidas ───────────────────────────────────────────────────────────────────
 static void applyOutput() {
@@ -258,6 +260,7 @@ void controllerGetState(AppState& out) {
     out.timerSetSecs = timerSetSecs;
     out.timerSecs    = (outputOn && inTimerMode()) ? timerSecs : 0;
     out.resistorDuty = resistenciaGet();
+    out.voltage      = currentVoltage;
 }
 
 bool controllerSetMode(AppMode m) {
@@ -369,6 +372,11 @@ void loop() {
 
     temperaturaUpdate(tempSetpoint);
     currentTemp = temperaturaGetCurrent();
+
+    if (millis() - voltageLastMs >= 200) {
+        voltageLastMs   = millis();
+        currentVoltage  = adcGetVoltage();
+    }
 
     handleTimer();
     handleKeyEvent(keyboardGetEvent());

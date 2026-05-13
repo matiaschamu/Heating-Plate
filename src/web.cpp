@@ -185,7 +185,10 @@ function render(){
   document.getElementById('curTemp').textContent=state.curTemp.toFixed(1);
   const duty=state.resistorDuty||0;
   document.getElementById('dutyFill').style.width=duty+'%';
-  document.getElementById('dutyText').textContent=state.outputOn?('salida '+duty+' %'):'';
+  const volts=Math.round(state.voltage||0);
+  const parts=[volts+' V'];
+  if(state.outputOn) parts.push('salida '+duty+' %');
+  document.getElementById('dutyText').textContent=parts.join(' · ');
   const mb=document.getElementById('modeBadge');
   mb.textContent=MODES[state.mode];
   mb.className='badge '+(state.mode===0?'badge-off':'badge-on');
@@ -249,6 +252,7 @@ static void handleApiState() {
     json += ",\"timerSetSecs\":";json += s.timerSetSecs;
     json += ",\"timerSecs\":";   json += s.timerSecs;
     json += ",\"resistorDuty\":";json += s.resistorDuty;
+    json += ",\"voltage\":";     json += String(s.voltage, 0);
     json += "}";
     webServer.send(200, "application/json", json);
 }

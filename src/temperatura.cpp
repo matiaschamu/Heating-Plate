@@ -1,4 +1,5 @@
 #include "temperatura.h"
+#include "calibracion.h"
 
 // ── MAX6675 (SPI bit-bang, solo lectura) ──────────────────────────────────────
 #define MAX6675_CS   5
@@ -87,7 +88,7 @@ void temperaturaInit() {
     delay(250);  // primera conversión del MAX6675
 
     float raw = readMax6675();
-    lastTemp  = (raw >= 0.0f) ? raw : 0.0f;
+    lastTemp  = (raw >= 0.0f) ? calibrarTemperatura(raw) : 0.0f;
     lastReadMs   = millis();
     pid_prevMeas = lastTemp;
     pid_lastMs   = millis();
@@ -98,8 +99,10 @@ bool temperaturaUpdate(float setpoint) {
     if (now - lastReadMs < MAX6675_MIN_PERIOD_MS) return false;
 
     float raw = readMax6675();
-    if (raw >= 0.0f)
-        lastTemp = TEMP_FILTER_ALPHA * raw + (1.0f - TEMP_FILTER_ALPHA) * lastTemp;
+    if (raw >= 0.0f) {
+        float real = calibrarTemperatura(raw);
+        lastTemp = TEMP_FILTER_ALPHA * real + (1.0f - TEMP_FILTER_ALPHA) * lastTemp;
+    }
 
     float dt = (now - pid_lastMs) / 1000.0f;
     if (dt <= 0.0f) dt = 0.5f;

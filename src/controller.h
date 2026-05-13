@@ -13,6 +13,7 @@ struct AppState {
     uint32_t timerSetSecs;   // configuración
     uint32_t timerSecs;      // restante; 0 si no está corriendo
     uint8_t  resistorDuty;   // salida actual de la resistencia 0-100 %
+    float    voltage;        // tensión de red estimada (V AC)
 };
 
 void controllerGetState(AppState& out);
