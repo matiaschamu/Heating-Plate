@@ -2,14 +2,14 @@
 #include "display.h"
 #include "encoder.h"
 #include "keyboard.h"
+#include "wifimgr.h"
+#include "web.h"
 #include "ota.h"
 #include "FanBuzzer.h"
 #include "Resistencia.h"
 #include "adc.h"
 #include "temperatura.h"
-
-// ── Modos ─────────────────────────────────────────────────────────────────────
-enum AppMode : uint8_t { OFF, POWER, POWER_TIMER, TEMP, TEMP_TIMER };
+#include "controller.h"
 
 // ── Estado global ──────────────────────────────────────────────────────────────
 static AppMode  appMode       = OFF;
@@ -248,14 +248,109 @@ static void handleKeyEvent(KeyEvent ev) {
     }
 }
 
+// ── API del controller (consumida por la web) ─────────────────────────────────
+void controllerGetState(AppState& out) {
+    out.mode         = appMode;
+    out.outputOn     = outputOn;
+    out.powerWatts   = powerWatts;
+    out.tempSetpoint = tempSetpoint;
+    out.currentTemp  = currentTemp;
+    out.timerSetSecs = timerSetSecs;
+    out.timerSecs    = (outputOn && inTimerMode()) ? timerSecs : 0;
+    out.resistorDuty = resistenciaGet();
+}
+
+bool controllerSetMode(AppMode m) {
+    if (m > TEMP_TIMER) return false;
+    if (m == OFF) {
+        appMode         = OFF;
+        outputOn        = false;
+        showCurrentTemp = false;
+        resistenciaSet(0);
+        fanSet(false);
+        return true;
+    }
+    bool    wasOn   = outputOn;
+    AppMode oldMode = appMode;
+    appMode         = m;
+    showTimerView   = true;
+    showCurrentTemp = false;
+
+    // Si seguimos prendidos y cambiamos a un modo TEMP desde otro, reset PID
+    if (wasOn && (m == TEMP || m == TEMP_TIMER) &&
+        oldMode != TEMP && oldMode != TEMP_TIMER) {
+        temperaturaPidReset();
+    }
+    return true;
+}
+
+bool controllerSetOutputOn(bool on) {
+    if (appMode == OFF) return false;
+    if (outputOn == on) return true;
+    outputOn = on;
+    if (on) {
+        if (inTimerMode()) {
+            timerSecs   = timerSetSecs;
+            timerLastMs = millis();
+        }
+        if (appMode == TEMP || appMode == TEMP_TIMER)
+            temperaturaPidReset();
+    }
+    return true;
+}
+
+bool controllerSetPowerWatts(uint16_t w) {
+    if (w < 100 || w > 2000) return false;
+    powerWatts = (w / 100) * 100;   // redondea al múltiplo de 100 más cercano por abajo
+    return true;
+}
+
+bool controllerSetTempSetpoint(uint16_t t) {
+    if (t > 650) return false;
+    tempSetpoint = t;
+    return true;
+}
+
+bool controllerSetTimerSecs(uint32_t s) {
+    if (s < 5 || s > 99 * 60) return false;
+    if (outputOn && inTimerMode() && timerSecs > 0)
+        timerSecs = s;
+    else
+        timerSetSecs = s;
+    return true;
+}
+
 // ── Setup / Loop ──────────────────────────────────────────────────────────────
 void setup() {
     delay(2000);
     Serial.begin(115200);
     displayInit();
-    otaInit();
-    encoderInit();
     keyboardInit();
+
+    // Si ambos botones están pulsados al arrancar → borrar WiFi guardado
+    // para poder reconfigurarlo desde el AP "Alien Tech".
+    delay(80);  // pequeño debounce
+    if (keyboardBothPressedRaw()) {
+        wifiClearCredentials();
+        displayDashes();
+        ledPower = true; ledTemp = true; ledTimer = true;
+        while (keyboardBothPressedRaw()) delay(10);   // esperar suelte
+    }
+
+    displayDashes();
+
+    // Flujo WiFi: intentar conectar al WiFi guardado; si falla, levantar AP.
+    if (wifiInit()) {
+        wifiShowCurrentIp();
+        otaInit();
+        webStartControlUI();
+    } else {
+        wifiStartAP();
+        wifiShowCurrentIp();
+        webStartCaptivePortal();
+    }
+
+    encoderInit();
     fanInit();
     resistenciaInit();
     adcInit();
@@ -269,6 +364,7 @@ void setup() {
 
 void loop() {
     otaHandle();
+    webHandle();
     fanBuzzerHandle();
 
     temperaturaUpdate(tempSetpoint);

@@ -8,6 +8,11 @@
 // El MAX6675 necesita ~220 ms entre conversiones
 #define MAX6675_MIN_PERIOD_MS  250
 
+// Filtro IIR pasa-bajos para la temperatura: temp = α·raw + (1-α)·temp.
+// α más bajo → más suave, más latencia. 0.3 da ~3-4 muestras (~1 s) de retraso,
+// despreciable contra la inercia térmica de la placa.
+#define TEMP_FILTER_ALPHA   0.3f
+
 // ── Parámetros PID iniciales (ajustar según la placa real) ────────────────────
 // Kp: % de salida por °C de error
 // Ki: % de salida por °C·s acumulados (corrige offset en estado estacionario)
@@ -17,7 +22,7 @@
 #define PID_KD_DEFAULT   8.0f
 
 // ── Estado ────────────────────────────────────────────────────────────────────
-static float    lastTempRaw    = 0.0f;
+static float    lastTemp    = 0.0f;
 static uint32_t lastReadMs     = 0;
 
 static float    pidOutput      = 0.0f;
@@ -51,14 +56,14 @@ static float readMax6675() {
 
 // ── PID (derivada sobre la medida para evitar kick al cambiar setpoint) ───────
 static void pidCompute(float setpoint, float dt) {
-    float error = setpoint - lastTempRaw;
+    float error = setpoint - lastTemp;
 
     float derivative = pid_firstRun
         ? 0.0f
-        : -(lastTempRaw - pid_prevMeas) / dt;
+        : -(lastTemp - pid_prevMeas) / dt;
 
     pid_firstRun = false;
-    pid_prevMeas = lastTempRaw;
+    pid_prevMeas = lastTemp;
 
     float newIntegral = pid_integral + error * dt;
     float out = pid_kp * error + pid_ki * newIntegral + pid_kd * derivative;
@@ -82,9 +87,9 @@ void temperaturaInit() {
     delay(250);  // primera conversión del MAX6675
 
     float raw = readMax6675();
-    lastTempRaw  = (raw >= 0.0f) ? raw : 0.0f;
+    lastTemp  = (raw >= 0.0f) ? raw : 0.0f;
     lastReadMs   = millis();
-    pid_prevMeas = lastTempRaw;
+    pid_prevMeas = lastTemp;
     pid_lastMs   = millis();
 }
 
@@ -93,7 +98,8 @@ bool temperaturaUpdate(float setpoint) {
     if (now - lastReadMs < MAX6675_MIN_PERIOD_MS) return false;
 
     float raw = readMax6675();
-    if (raw >= 0.0f) lastTempRaw = raw;
+    if (raw >= 0.0f)
+        lastTemp = TEMP_FILTER_ALPHA * raw + (1.0f - TEMP_FILTER_ALPHA) * lastTemp;
 
     float dt = (now - pid_lastMs) / 1000.0f;
     if (dt <= 0.0f) dt = 0.5f;
@@ -105,12 +111,12 @@ bool temperaturaUpdate(float setpoint) {
     return true;
 }
 
-float temperaturaGetCurrent() { return lastTempRaw; }
+float temperaturaGetCurrent() { return lastTemp; }
 float temperaturaGetOutput()  { return pidOutput;   }
 
 void temperaturaPidReset() {
     pid_integral = 0.0f;
-    pid_prevMeas = lastTempRaw;
+    pid_prevMeas = lastTemp;
     pid_firstRun = true;
     pid_lastMs   = millis();
 }

@@ -10,3 +10,7 @@ enum KeyEvent : uint8_t {
 
 void keyboardInit();
 KeyEvent keyboardGetEvent();
+
+// Lectura cruda de ambos botones (LOW = pulsado). Llamar después de
+// keyboardInit() y de un pequeño debounce. Útil al inicio del setup().
+bool keyboardBothPressedRaw();
